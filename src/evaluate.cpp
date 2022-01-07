@@ -1097,7 +1097,14 @@ Value Eval::evaluate(const Position& pos) {
   if (useNNUE && !useClassical)
   {
        Value nnue     = NNUE::evaluate(pos, true);     // NNUE
-       int scale      = 1136 + 20 * pos.non_pawn_material() / 1024;
+         Bitboard w_pawns = pos.pieces(WHITE, PAWN);
+       Bitboard b_pawns = pos.pieces(BLACK, PAWN);
+       int supported = popcount(  (pawn_attacks_bb<WHITE>(w_pawns) & w_pawns)
+                                | (pawn_attacks_bb<BLACK>(b_pawns) & b_pawns) );
+       int scale =  906
+                   - 16 * supported
+                   + 24 * pos.count<PAWN>()
+                   + 33 * pos.non_pawn_material() / 1024;
        Color stm      = pos.side_to_move();
        Value optimism = pos.this_thread()->optimism[stm];
        Value psq      = (stm == WHITE ? 1 : -1) * eg_value(pos.psq_score());
