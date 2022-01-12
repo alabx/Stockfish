@@ -552,7 +552,7 @@ namespace {
     Depth extension, newDepth;
     Value bestValue, value, ttValue, eval, maxValue, probCutBeta;
     bool givesCheck, improving, didLMR, priorCapture;
-    bool captureOrPromotion, doFullDepthSearch, moveCountPruning, ttCapture, singularQuietLMR;
+    bool captureOrPromotion, doFullDepthSearch, moveCountPruning, ttCapture, singularQuietLMR, noLMRExtension;
     Piece movedPiece;
     int moveCount, captureCount, quietCount, bestMoveCount, improvement;
 
