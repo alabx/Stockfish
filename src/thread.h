@@ -60,14 +60,11 @@ public:
   Pawns::Table pawnsTable;
   Material::Table materialTable;
   size_t pvIdx, pvLast;
-  RunningAverage doubleExtensionAverage[COLOR_NB];
-  uint64_t nodesLastExplosive;
-  uint64_t nodesLastNormal;
-  std::atomic<uint64_t> nodes, tbHits, bestMoveChanges;
+  uint64_t ttHitAverage;
   Value bestValue;
   int selDepth, nmpMinPly;
   Color nmpColor;
-  ExplosionState state;
+  std::atomic<uint64_t> nodes, tbHits, bestMoveChanges;
   Value optimism[COLOR_NB];
 
   Position rootPos;
