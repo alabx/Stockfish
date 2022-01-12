@@ -552,7 +552,7 @@ namespace {
     Depth extension, newDepth;
     Value bestValue, value, ttValue, eval, maxValue, probCutBeta;
     bool givesCheck, improving, didLMR, priorCapture;
-    bool captureOrPromotion, doFullDepthSearch, moveCountPruning, ttCapture, singularQuietLMR, noLMRExtension;
+    bool captureOrPromotion, doFullDepthSearch, moveCountPruning, ttCapture, singularQuietLMR;
     Piece movedPiece;
     int moveCount, captureCount, quietCount, bestMoveCount, improvement;
 
@@ -1066,7 +1066,7 @@ moves_loop: // When in check, search starts here
                   && ss->doubleExtensions < 3)
               {
                   extension = 2;
-                  noLMRExtension = true;
+                 doubleExtension = true;
               }
           }
 
