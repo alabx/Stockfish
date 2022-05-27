@@ -69,13 +69,14 @@ namespace {
   // Reductions lookup table, initialized at startup
   int Reductions[MAX_MOVES]; // [depth or moveNumber]
 
-  Depth reduction(bool i, Depth d, int mn, Value delta, Value rootDelta) {
+  Depth reduction(bool i, Depth d, int mn, Value delta, double inverseRootDelta) {
     int r = Reductions[d] * Reductions[mn];
-    return (r + 1463 - int(delta) * 1024 / int(rootDelta)) / 1024 + (!i && r > 1010);
+    return int(r + 1461 - 1024 * int(delta) * inverseRootDelta) / 1024 + (!i && r > 1010);
   }
 
   constexpr int futility_move_count(bool improving, Depth depth) {
-    return (3 + depth * depth) / (2 - improving);
+    return improving ? (3 + depth * depth)
+                     : (3 + depth * depth) / 2;
   }
 
   // History and stats update bonus, based on depth
@@ -599,7 +600,7 @@ namespace {
             return alpha;
     }
     else
-        thisThread->rootDelta = beta - alpha;
+        thisThread->inverseRootDelta = 1.0 / (beta - alpha);
 
     assert(0 <= ss->ply && ss->ply < MAX_PLY);
 
@@ -785,7 +786,7 @@ namespace {
         && eval < alpha - 348 - 258 * depth * depth)
     {
         value = qsearch<NonPV>(pos, ss, alpha - 1, alpha);
-        if (value < alpha)
+        if (value < alpha || value > beta + 13 * depth * depth)
             return value;
     }
 
@@ -1010,7 +1011,7 @@ moves_loop: // When in check, search starts here
           moveCountPruning = moveCount >= futility_move_count(improving, depth);
 
           // Reduced depth of the next LMR search
-          int lmrDepth = std::max(newDepth - reduction(improving, depth, moveCount, delta, thisThread->rootDelta), 0);
+          int lmrDepth = std::max(newDepth - reduction(improving, depth, moveCount, delta, thisThread->inverseRootDelta), 0);
 
           if (   capture
               || givesCheck)
@@ -1063,8 +1064,10 @@ moves_loop: // When in check, search starts here
           // then that move is singular and should be extended. To verify this we do
           // a reduced search on all the other moves but the ttMove and if the
           // result is lower than ttValue minus a margin, then we will extend the ttMove.
+          int depthBoundDiscount = thisThread->previousDepth / 9; // At higher depths, do more SEs
           if (   !rootNode
-              &&  depth >= 4 - (thisThread->previousDepth > 27) + 2 * (PvNode && tte->is_pv())
+          
+              &&  depth >= 6 - depthBoundDiscount + 2 * (PvNode && tte->is_pv())
               &&  move == ttMove
               && !excludedMove // Avoid recursive singular search
            /* &&  ttValue != VALUE_NONE Already implicit in the next condition */
@@ -1150,7 +1153,7 @@ moves_loop: // When in check, search starts here
               || !capture
               || (cutNode && (ss-1)->moveCount > 1)))
       {
-          Depth r = reduction(improving, depth, moveCount, delta, thisThread->rootDelta);
+          Depth r = reduction(improving, depth, moveCount, delta, thisThread->inverseRootDelta);
 
           // Decrease reduction if position is or has been on the PV
           // and node is not likely to fail low. (~3 Elo)
@@ -1694,6 +1697,7 @@ moves_loop: // When in check, search starts here
                         Move* quietsSearched, int quietCount, Move* capturesSearched, int captureCount, Depth depth) {
 
     int bonus1, bonus2;
+    bool capture = pos.capture(bestMove);
     Color us = pos.side_to_move();
     Thread* thisThread = pos.this_thread();
     CapturePieceToHistory& captureHistory = thisThread->captureHistory;
@@ -1704,7 +1708,7 @@ moves_loop: // When in check, search starts here
     bonus2 = bestValue > beta + PawnValueMg ? bonus1               // larger bonus
                                             : stat_bonus(depth);   // smaller bonus
 
-    if (!pos.capture(bestMove))
+    if (!capture)
     {
         // Increase stats for the best move in case it was a quiet move
         update_quiet_stats(pos, ss, bestMove, bonus2);
@@ -1716,7 +1720,7 @@ moves_loop: // When in check, search starts here
             update_continuation_histories(ss, pos.moved_piece(quietsSearched[i]), to_sq(quietsSearched[i]), -bonus2);
         }
     }
-    else
+        if (capture || promotion_type(bestMove) == QUEEN)
         // Increase stats for the best move in case it was a capture move
         captureHistory[moved_piece][to_sq(bestMove)][captured] << bonus1;
 
