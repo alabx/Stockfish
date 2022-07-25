@@ -1143,7 +1143,7 @@ moves_loop: // When in check, search starts here
               || !capture
               || (cutNode && (ss-1)->moveCount > 1)))
       {
-          Depth r = reduction(improving, depth, moveCount, delta, thisThread->rootDelta);
+          Depth r = reduction(improving, depth, moveCount, delta, thisThread->rootDelta) + ttCapture;
 
           // Decrease reduction if position is or has been on the PV
           // and node is not likely to fail low. (~3 Elo)
@@ -1158,10 +1158,6 @@ moves_loop: // When in check, search starts here
           // Increase reduction for cut nodes (~3 Elo)
           if (cutNode)
               r += 2;
-
-          // Increase reduction if ttMove is a capture (~3 Elo)
-          if (ttCapture)
-              r++;
 
           // Decrease reduction for PvNodes based on depth
           if (PvNode)
