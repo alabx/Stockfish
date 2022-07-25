@@ -557,7 +557,7 @@ namespace {
     Key posKey;
     Move ttMove, move, excludedMove, bestMove;
     Depth extension, newDepth;
-    Value bestValue, value, ttValue, eval, maxValue, probCutBeta;
+    Value bestValue, value, ttValue, eval, maxValue, probCutBeta, origAlpha;
     bool givesCheck, improving, didLMR, priorCapture;
     bool capture, doFullDepthSearch, moveCountPruning, ttCapture;
     Piece movedPiece;
@@ -572,6 +572,7 @@ namespace {
     moveCount          = captureCount = quietCount = ss->moveCount = 0;
     bestValue          = -VALUE_INFINITE;
     maxValue           = VALUE_INFINITE;
+    origAlpha          = alpha;
 
     // Check for the available remaining time
     if (thisThread == Threads.main())
@@ -1286,7 +1287,10 @@ moves_loop: // When in check, search starts here
 
               if (PvNode && value < beta) // Update alpha! Always alpha < beta
               {
-                  alpha = value;
+                  if (beta < VALUE_INFINITE)
+                      alpha = std::min(std::max(value, beta - 3 * depth), (beta - 1 + origAlpha) / 2);
+                  else
+                      alpha = value;
 
                   // Reduce other moves if we have found at least one score improvement
                   if (   depth > 2
