@@ -1151,6 +1151,10 @@ moves_loop: // When in check, search starts here
               && !likelyFailLow)
               r -= 2;
 
+          for (int i = 0; i <= 5 && i < int(thisThread->rootMoves.size()); i++)
+               if (rootNode && thisThread->bestMoveChanges > 5 && move != thisThread->rootMoves[i].pv[0])
+                   r++;
+
           // Decrease reduction if opponent's move count is high (~1 Elo)
           if ((ss-1)->moveCount > 7)
               r--;
