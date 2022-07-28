@@ -1162,6 +1162,10 @@ moves_loop: // When in check, search starts here
           // Increase reduction if ttMove is a capture (~3 Elo)
           if (ttCapture)
               r++;
+          if (  PvNode 
+             && !ss->inCheck
+             && abs(ss->staticEval - bestValue) > 348)
+              r--;
 
           // Decrease reduction for PvNodes based on depth
           if (PvNode)
