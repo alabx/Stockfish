@@ -495,7 +495,7 @@ void Thread::search() {
           }
           else if (   Threads.increaseDepth
                    && !mainThread->ponder
-                   && Time.elapsed() > totalTime * 0.43)
+                   && Time.elapsed() > totalTime * 0.41)
                    Threads.increaseDepth = false;
           else
                    Threads.increaseDepth = true;
@@ -775,7 +775,7 @@ namespace {
     // margin and the improving flag are used in various pruning heuristics.
     improvement =   (ss-2)->staticEval != VALUE_NONE ? ss->staticEval - (ss-2)->staticEval
                   : (ss-4)->staticEval != VALUE_NONE ? ss->staticEval - (ss-4)->staticEval
-                  :                                    175;
+                  :                                    170;
     improving = improvement > 0;
 
     // Step 7. Razoring.
@@ -849,7 +849,7 @@ namespace {
         }
     }
 
-    probCutBeta = beta + 179 - 46 * improving;
+    probCutBeta = beta + 170 - 45 * improving;
 
     // Step 10. ProbCut (~4 Elo)
     // If we have a good enough capture and a reduced search returns a value
@@ -1078,7 +1078,7 @@ moves_loop: // When in check, search starts here
 
                   // Avoid search explosion by limiting the number of double extensions
                   if (  !PvNode
-                      && value < singularBeta - 26
+                      && value < singularBeta - 24
                       && ss->doubleExtensions <= 8)
                       extension = 2;
               }
@@ -1110,7 +1110,7 @@ moves_loop: // When in check, search starts here
           else if (   PvNode
                    && move == ttMove
                    && move == ss->killers[0]
-                   && (*contHist[0])[movedPiece][to_sq(move)] >= 5491)
+                   && (*contHist[0])[movedPiece][to_sq(move)] >= 5200)
               extension = 1;
       }
 
