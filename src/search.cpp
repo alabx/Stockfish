@@ -490,7 +490,8 @@ void Thread::search() {
               else
                   Threads.stop = true;
           }
-          else if (   !mainThread->ponder
+          else if (   Threads.increaseDepth
+                   && !mainThread->ponder
                    && Time.elapsed() > totalTime * 0.53)
               Threads.increaseDepth = false;
           else
@@ -736,6 +737,10 @@ namespace {
             ss->staticEval = eval = evaluate(pos, &complexity);
         else // Fall back to (semi)classical complexity for TT hits, the NNUE complexity is lost
             complexity = abs(ss->staticEval - pos.psq_eg_stm());
+            
+        // Randomize draw evaluation
+        if (eval == VALUE_DRAW)
+            eval = value_draw(thisThread);
 
         // ttValue can be used as a better position evaluation (~7 Elo)
         if (    ttValue != VALUE_NONE
@@ -857,7 +862,7 @@ namespace {
     {
         assert(probCutBeta < VALUE_INFINITE);
 
-        MovePicker mp(pos, ttMove, probCutBeta - ss->staticEval, &captureHistory);
+        MovePicker mp(pos, ttMove, probCutBeta - ss->staticEval, depth - 3, &captureHistory);
 
         while ((move = mp.next_move()) != MOVE_NONE)
             if (move != excludedMove && pos.legal(move))
@@ -998,7 +1003,8 @@ moves_loop: // When in check, search starts here
               || givesCheck)
           {
               // Futility pruning for captures (~2 Elo)
-              if (   !givesCheck
+              if (   !pos.empty(to_sq(move))
+                  && !givesCheck
                   && !PvNode
                   && lmrDepth < 7
                   && !ss->inCheck
@@ -1157,7 +1163,7 @@ moves_loop: // When in check, search starts here
           r--;
 
       // Increase reduction if next ply has a lot of fail high
-      if ((ss+1)->cutoffCnt > 3)
+          if ((ss+1)->cutoffCnt > 3 && !PvNode)
           r++;
 
       ss->statScore =  2 * thisThread->mainHistory[us][from_to(move)]
