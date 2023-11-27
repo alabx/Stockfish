@@ -21,17 +21,20 @@
 #ifndef NNUE_ACCUMULATOR_H_INCLUDED
 #define NNUE_ACCUMULATOR_H_INCLUDED
 
+#include <cstdint>
+
 #include "nnue_architecture.h"
+#include "nnue_common.h"
 
 namespace Stockfish::Eval::NNUE {
 
-  // Class that holds the result of affine transformation of input features
-  struct alignas(CacheLineSize) Accumulator {
+// Class that holds the result of affine transformation of input features
+struct alignas(CacheLineSize) Accumulator {
     std::int16_t accumulation[2][TransformedFeatureDimensions];
     std::int32_t psqtAccumulation[2][PSQTBuckets];
-    bool computed[2];
-  };
+    bool         computed[2];
+};
 
 }  // namespace Stockfish::Eval::NNUE
 
-#endif // NNUE_ACCUMULATOR_H_INCLUDED
+#endif  // NNUE_ACCUMULATOR_H_INCLUDED
