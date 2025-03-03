@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2024 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -18,7 +18,9 @@
 
 #include "misc.h"
 
+#include <array>
 #include <atomic>
+#include <cassert>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -112,15 +114,17 @@ class Logger {
 
 
 // Returns the full name of the current Stockfish version.
-// For local dev compiles we try to append the commit sha and commit date
-// from git if that fails only the local compilation date is set and "nogit" is specified:
-// Stockfish dev-YYYYMMDD-SHA
-// or
-// Stockfish dev-YYYYMMDD-nogit
+//
+// For local dev compiles we try to append the commit SHA and
+// commit date from git. If that fails only the local compilation
+// date is set and "nogit" is specified:
+//      Stockfish dev-YYYYMMDD-SHA
+//      or
+//      Stockfish dev-YYYYMMDD-nogit
 //
 // For releases (non-dev builds) we only include the version number:
-// Stockfish version
-std::string engine_info(bool to_uci) {
+//      Stockfish version
+std::string engine_version_info() {
     std::stringstream ss;
     ss << "Stockfish " << version << std::setfill('0');
 
@@ -131,8 +135,9 @@ std::string engine_info(bool to_uci) {
         ss << stringify(GIT_DATE);
 #else
         constexpr std::string_view months("Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec");
-        std::string                month, day, year;
-        std::stringstream          date(__DATE__);  // From compiler, format is "Sep 21 2008"
+
+        std::string       month, day, year;
+        std::stringstream date(__DATE__);  // From compiler, format is "Sep 21 2008"
 
         date >> month >> day >> year;
         ss << year << std::setw(2) << std::setfill('0') << (1 + months.find(month) / 4)
@@ -148,9 +153,12 @@ std::string engine_info(bool to_uci) {
 #endif
     }
 
-    ss << (to_uci ? "\nid author " : " by ") << "the Stockfish developers (see AUTHORS file)";
-
     return ss.str();
+}
+
+std::string engine_info(bool to_uci) {
+    return engine_version_info() + (to_uci ? "\nid author " : " by ")
+         + "the Stockfish developers (see AUTHORS file)";
 }
 
 
@@ -281,7 +289,10 @@ template<size_t N>
 struct DebugInfo {
     std::atomic<int64_t> data[N] = {0};
 
-    constexpr std::atomic<int64_t>& operator[](int index) { return data[index]; }
+    [[nodiscard]] constexpr std::atomic<int64_t>& operator[](size_t index) {
+        assert(index < N);
+        return data[index];
+    }
 };
 
 struct DebugExtremes: public DebugInfo<3> {
@@ -291,54 +302,54 @@ struct DebugExtremes: public DebugInfo<3> {
     }
 };
 
-DebugInfo<2>  hit[MaxDebugSlots];
-DebugInfo<2>  mean[MaxDebugSlots];
-DebugInfo<3>  stdev[MaxDebugSlots];
-DebugInfo<6>  correl[MaxDebugSlots];
-DebugExtremes extremes[MaxDebugSlots];
+std::array<DebugInfo<2>, MaxDebugSlots>  hit;
+std::array<DebugInfo<2>, MaxDebugSlots>  mean;
+std::array<DebugInfo<3>, MaxDebugSlots>  stdev;
+std::array<DebugInfo<6>, MaxDebugSlots>  correl;
+std::array<DebugExtremes, MaxDebugSlots> extremes;
 
 }  // namespace
 
 void dbg_hit_on(bool cond, int slot) {
 
-    ++hit[slot][0];
+    ++hit.at(slot)[0];
     if (cond)
-        ++hit[slot][1];
+        ++hit.at(slot)[1];
 }
 
 void dbg_mean_of(int64_t value, int slot) {
 
-    ++mean[slot][0];
-    mean[slot][1] += value;
+    ++mean.at(slot)[0];
+    mean.at(slot)[1] += value;
 }
 
 void dbg_stdev_of(int64_t value, int slot) {
 
-    ++stdev[slot][0];
-    stdev[slot][1] += value;
-    stdev[slot][2] += value * value;
+    ++stdev.at(slot)[0];
+    stdev.at(slot)[1] += value;
+    stdev.at(slot)[2] += value * value;
 }
 
 void dbg_extremes_of(int64_t value, int slot) {
-    ++extremes[slot][0];
+    ++extremes.at(slot)[0];
 
-    int64_t current_max = extremes[slot][1].load();
-    while (current_max < value && !extremes[slot][1].compare_exchange_weak(current_max, value))
+    int64_t current_max = extremes.at(slot)[1].load();
+    while (current_max < value && !extremes.at(slot)[1].compare_exchange_weak(current_max, value))
     {}
 
-    int64_t current_min = extremes[slot][2].load();
-    while (current_min > value && !extremes[slot][2].compare_exchange_weak(current_min, value))
+    int64_t current_min = extremes.at(slot)[2].load();
+    while (current_min > value && !extremes.at(slot)[2].compare_exchange_weak(current_min, value))
     {}
 }
 
 void dbg_correl_of(int64_t value1, int64_t value2, int slot) {
 
-    ++correl[slot][0];
-    correl[slot][1] += value1;
-    correl[slot][2] += value1 * value1;
-    correl[slot][3] += value2;
-    correl[slot][4] += value2 * value2;
-    correl[slot][5] += value1 * value2;
+    ++correl.at(slot)[0];
+    correl.at(slot)[1] += value1;
+    correl.at(slot)[2] += value1 * value1;
+    correl.at(slot)[3] += value2;
+    correl.at(slot)[4] += value2 * value2;
+    correl.at(slot)[5] += value1 * value2;
 }
 
 void dbg_print() {
@@ -448,7 +459,7 @@ void remove_whitespace(std::string& s) {
     s.erase(std::remove_if(s.begin(), s.end(), [](char c) { return std::isspace(c); }), s.end());
 }
 
-bool is_whitespace(const std::string& s) {
+bool is_whitespace(std::string_view s) {
     return std::all_of(s.begin(), s.end(), [](char c) { return std::isspace(c); });
 }
 

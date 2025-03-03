@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2024 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -443,6 +443,8 @@ class TBTables {
 
     std::deque<TBTable<WDL>> wdlTable;
     std::deque<TBTable<DTZ>> dtzTable;
+    size_t                   foundDTZFiles = 0;
+    size_t                   foundWDLFiles = 0;
 
     void insert(Key key, TBTable<WDL>* wdl, TBTable<DTZ>* dtz) {
         uint32_t homeBucket = uint32_t(key) & (Size - 1);
@@ -486,9 +488,16 @@ class TBTables {
         memset(hashTable, 0, sizeof(hashTable));
         wdlTable.clear();
         dtzTable.clear();
+        foundDTZFiles = 0;
+        foundWDLFiles = 0;
     }
-    size_t size() const { return wdlTable.size(); }
-    void   add(const std::vector<PieceType>& pieces);
+
+    void info() const {
+        sync_cout << "info string Found " << foundWDLFiles << " WDL and " << foundDTZFiles
+                  << " DTZ tablebase files (up to " << MaxCardinality << "-man)." << sync_endl;
+    }
+
+    void add(const std::vector<PieceType>& pieces);
 };
 
 TBTables TBTables;
@@ -501,13 +510,22 @@ void TBTables::add(const std::vector<PieceType>& pieces) {
 
     for (PieceType pt : pieces)
         code += PieceToChar[pt];
+    code.insert(code.find('K', 1), "v");
 
-    TBFile file(code.insert(code.find('K', 1), "v") + ".rtbw");  // KRK -> KRvK
+    TBFile file_dtz(code + ".rtbz");  // KRK -> KRvK
+    if (file_dtz.is_open())
+    {
+        file_dtz.close();
+        foundDTZFiles++;
+    }
+
+    TBFile file(code + ".rtbw");  // KRK -> KRvK
 
     if (!file.is_open())  // Only WDL file is checked
         return;
 
     file.close();
+    foundWDLFiles++;
 
     MaxCardinality = std::max(int(pieces.size()), MaxCardinality);
 
@@ -1326,7 +1344,7 @@ void Tablebases::init(const std::string& paths) {
     MaxCardinality = 0;
     TBFile::Paths  = paths;
 
-    if (paths.empty() || paths == "<empty>")
+    if (paths.empty())
         return;
 
     // MapB1H1H7[] encodes a square below a1-h8 diagonal to 0..27
@@ -1466,7 +1484,7 @@ void Tablebases::init(const std::string& paths) {
         }
     }
 
-    sync_cout << "info string Found " << TBTables.size() << " tablebases" << sync_endl;
+    TBTables.info();
 }
 
 // Probe the WDL table for a particular position.
@@ -1602,7 +1620,7 @@ bool Tablebases::root_probe(Position&          pos,
             WDLScore wdl = -probe_wdl(pos, &result);
             dtz          = dtz_before_zeroing(wdl);
         }
-        else if (pos.is_draw(1))
+        else if ((rule50 && pos.is_draw(1)) || pos.is_repetition(1))
         {
             // In case a root move leads to a draw by repetition or 50-move rule,
             // we set dtz to zero. Note: since we are only 1 ply from the root,

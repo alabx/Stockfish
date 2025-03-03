@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2024 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <utility>
@@ -57,16 +58,30 @@ void OptionsMap::setoption(std::istringstream& is) {
         sync_cout << "No such option: " << name << sync_endl;
 }
 
-Option OptionsMap::operator[](const std::string& name) const {
+const Option& OptionsMap::operator[](const std::string& name) const {
     auto it = options_map.find(name);
-    return it != options_map.end() ? it->second : Option(this);
+    assert(it != options_map.end());
+    return it->second;
 }
 
-Option& OptionsMap::operator[](const std::string& name) {
+// Inits options and assigns idx in the correct printing order
+void OptionsMap::add(const std::string& name, const Option& option) {
     if (!options_map.count(name))
-        options_map[name] = Option(this);
-    return options_map[name];
+    {
+        static size_t insert_order = 0;
+
+        options_map[name] = option;
+
+        options_map[name].parent = this;
+        options_map[name].idx    = insert_order++;
+    }
+    else
+    {
+        std::cerr << "Option \"" << name << "\" was already added!" << std::endl;
+        std::exit(EXIT_FAILURE);
+    }
 }
+
 
 std::size_t OptionsMap::count(const std::string& name) const { return options_map.count(name); }
 
@@ -130,19 +145,6 @@ bool Option::operator==(const char* s) const {
 bool Option::operator!=(const char* s) const { return !(*this == s); }
 
 
-// Inits options and assigns idx in the correct printing order
-
-void Option::operator<<(const Option& o) {
-
-    static size_t insert_order = 0;
-
-    auto p = this->parent;
-    *this  = o;
-
-    this->parent = p;
-    idx          = insert_order++;
-}
-
 // Updates currentValue and triggers on_change() action. It's up to
 // the GUI to check for option's limits, but we could receive the new value
 // from the user by console window, so let's check the bounds anyway.
@@ -161,12 +163,14 @@ Option& Option::operator=(const std::string& v) {
         std::string        token;
         std::istringstream ss(defaultValue);
         while (ss >> token)
-            comboMap[token] << Option();
+            comboMap.add(token, Option());
         if (!comboMap.count(v) || v == "var")
             return *this;
     }
 
-    if (type != "button")
+    if (type == "string")
+        currentValue = v == "<empty>" ? "" : v;
+    else if (type != "button")
         currentValue = v;
 
     if (on_change)
@@ -188,10 +192,16 @@ std::ostream& operator<<(std::ostream& os, const OptionsMap& om) {
                 const Option& o = it.second;
                 os << "\noption name " << it.first << " type " << o.type;
 
-                if (o.type == "string" || o.type == "check" || o.type == "combo")
+                if (o.type == "check" || o.type == "combo")
                     os << " default " << o.defaultValue;
 
-                if (o.type == "spin")
+                else if (o.type == "string")
+                {
+                    std::string defaultValue = o.defaultValue.empty() ? "<empty>" : o.defaultValue;
+                    os << " default " << defaultValue;
+                }
+
+                else if (o.type == "spin")
                     os << " default " << int(stof(o.defaultValue)) << " min " << o.min << " max "
                        << o.max;
 

@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2024 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -59,34 +59,27 @@ Value Eval::evaluate(const Eval::NNUE::Networks&    networks,
 
     assert(!pos.checkers());
 
-    int  simpleEval = simple_eval(pos, pos.side_to_move());
-    bool smallNet   = use_smallnet(pos);
-    int  v;
-
+    bool smallNet           = use_smallnet(pos);
     auto [psqt, positional] = smallNet ? networks.small.evaluate(pos, &caches.small)
                                        : networks.big.evaluate(pos, &caches.big);
 
-    Value nnue           = (125 * psqt + 131 * positional) / 128;
-    int   nnueComplexity = std::abs(psqt - positional);
+    Value nnue = (125 * psqt + 131 * positional) / 128;
 
     // Re-evaluate the position when higher eval accuracy is worth the time spent
-    if (smallNet && (nnue * simpleEval < 0 || std::abs(nnue) < 227))
+    if (smallNet && (std::abs(nnue) < 236))
     {
         std::tie(psqt, positional) = networks.big.evaluate(pos, &caches.big);
         nnue                       = (125 * psqt + 131 * positional) / 128;
-        nnueComplexity             = std::abs(psqt - positional);
         smallNet                   = false;
     }
 
     // Blend optimism and eval with nnue complexity
-    optimism += optimism * nnueComplexity / 457;
-    nnue -= nnue * nnueComplexity / 19157;
+    int nnueComplexity = std::abs(psqt - positional);
+    optimism += optimism * nnueComplexity / 468;
+    nnue -= nnue * nnueComplexity / 18000;
 
-    int material = 554 * pos.count<PAWN>() + pos.non_pawn_material();
-    v            = (nnue * (73921 + material) + optimism * (8112 + material)) / 73260;
-
-    // Evaluation grain (to get more alpha-beta cuts) with randomization (for robustness)
-    v = (v / 16) * 16 - 1 + (pos.key() & 0x2);
+    int material = 535 * pos.count<PAWN>() + pos.non_pawn_material();
+    int v        = (nnue * (77777 + material) + optimism * (7777 + material)) / 77777;
 
     // Damp down the evaluation linearly when shuffling
     v -= v * pos.rule50_count() / 212;

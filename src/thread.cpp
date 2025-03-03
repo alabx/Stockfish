@@ -1,6 +1,6 @@
 /*
   Stockfish, a UCI chess playing engine derived from Glaurung 2.1
-  Copyright (C) 2004-2024 The Stockfish developers (see AUTHORS file)
+  Copyright (C) 2004-2025 The Stockfish developers (see AUTHORS file)
 
   Stockfish is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
@@ -50,8 +50,8 @@ Thread::Thread(Search::SharedState&                    sharedState,
 
     run_custom_job([this, &binder, &sharedState, &sm, n]() {
         // Use the binder to [maybe] bind the threads to a NUMA node before doing
-        // the Worker allocation.
-        // Ideally we would also allocate the SearchManager here, but that's minor.
+        // the Worker allocation. Ideally we would also allocate the SearchManager
+        // here, but that's minor.
         this->numaAccessToken = binder();
         this->worker =
           std::make_unique<Search::Worker>(sharedState, std::move(sm), n, this->numaAccessToken);
@@ -72,27 +72,26 @@ Thread::~Thread() {
     stdThread.join();
 }
 
-
 // Wakes up the thread that will start the search
 void Thread::start_searching() {
     assert(worker != nullptr);
     run_custom_job([this]() { worker->start_searching(); });
 }
 
-// Wakes up the thread that will start the search
+// Clears the histories for the thread worker (usually before a new game)
 void Thread::clear_worker() {
     assert(worker != nullptr);
     run_custom_job([this]() { worker->clear(); });
 }
 
-// Blocks on the condition variable
-// until the thread has finished searching.
+// Blocks on the condition variable until the thread has finished searching
 void Thread::wait_for_search_finished() {
 
     std::unique_lock<std::mutex> lk(mutex);
     cv.wait(lk, [&] { return !searching; });
 }
 
+// Launching a function in the thread
 void Thread::run_custom_job(std::function<void()> f) {
     {
         std::unique_lock<std::mutex> lk(mutex);
@@ -103,8 +102,10 @@ void Thread::run_custom_job(std::function<void()> f) {
     cv.notify_one();
 }
 
-// Thread gets parked here, blocked on the
-// condition variable, when it has no work to do.
+void Thread::ensure_network_replicated() { worker->ensure_network_replicated(); }
+
+// Thread gets parked here, blocked on the condition variable
+// when the thread has no work to do.
 
 void Thread::idle_loop() {
     while (true)
@@ -233,8 +234,9 @@ void ThreadPool::wait_on_thread(size_t threadId) {
 
 size_t ThreadPool::num_threads() const { return threads.size(); }
 
-// Wakes up main thread waiting in idle_loop() and
-// returns immediately. Main thread will wake up other threads and start the search.
+
+// Wakes up main thread waiting in idle_loop() and returns immediately.
+// Main thread will wake up other threads and start the search.
 void ThreadPool::start_thinking(const OptionsMap&  options,
                                 Position&          pos,
                                 StateListPtr&      states,
@@ -274,8 +276,8 @@ void ThreadPool::start_thinking(const OptionsMap&  options,
     // We use Position::set() to set root position across threads. But there are
     // some StateInfo fields (previous, pliesFromNull, capturedPiece) that cannot
     // be deduced from a fen string, so set() clears them and they are set from
-    // setupStates->back() later. The rootState is per thread, earlier states are shared
-    // since they are read-only.
+    // setupStates->back() later. The rootState is per thread, earlier states are
+    // shared since they are read-only.
     for (auto&& th : threads)
     {
         th->run_custom_job([&]() {
@@ -327,15 +329,15 @@ Thread* ThreadPool::get_best_thread() const {
         const auto bestThreadMoveVote = votes[bestThreadPV[0]];
         const auto newThreadMoveVote  = votes[newThreadPV[0]];
 
-        const bool bestThreadInProvenWin = bestThreadScore >= VALUE_TB_WIN_IN_MAX_PLY;
-        const bool newThreadInProvenWin  = newThreadScore >= VALUE_TB_WIN_IN_MAX_PLY;
+        const bool bestThreadInProvenWin = is_win(bestThreadScore);
+        const bool newThreadInProvenWin  = is_win(newThreadScore);
 
         const bool bestThreadInProvenLoss =
-          bestThreadScore != -VALUE_INFINITE && bestThreadScore <= VALUE_TB_LOSS_IN_MAX_PLY;
+          bestThreadScore != -VALUE_INFINITE && is_loss(bestThreadScore);
         const bool newThreadInProvenLoss =
-          newThreadScore != -VALUE_INFINITE && newThreadScore <= VALUE_TB_LOSS_IN_MAX_PLY;
+          newThreadScore != -VALUE_INFINITE && is_loss(newThreadScore);
 
-        // Note that we make sure not to pick a thread with truncated-PV for better viewer experience.
+        // We make sure not to pick a thread with truncated principal variation
         const bool betterVotingValue =
           thread_voting_value(th.get()) * int(newThreadPV.size() > 2)
           > thread_voting_value(bestThread) * int(bestThreadPV.size() > 2);
@@ -353,7 +355,7 @@ Thread* ThreadPool::get_best_thread() const {
                 bestThread = th.get();
         }
         else if (newThreadInProvenWin || newThreadInProvenLoss
-                 || (newThreadScore > VALUE_TB_LOSS_IN_MAX_PLY
+                 || (!is_loss(newThreadScore)
                      && (newThreadMoveVote > bestThreadMoveVote
                          || (newThreadMoveVote == bestThreadMoveVote && betterVotingValue))))
             bestThread = th.get();
@@ -363,8 +365,8 @@ Thread* ThreadPool::get_best_thread() const {
 }
 
 
-// Start non-main threads
-// Will be invoked by main thread after it has started searching
+// Start non-main threads.
+// Will be invoked by main thread after it has started searching.
 void ThreadPool::start_searching() {
 
     for (auto&& th : threads)
@@ -374,7 +376,6 @@ void ThreadPool::start_searching() {
 
 
 // Wait for non-main threads
-
 void ThreadPool::wait_for_search_finished() const {
 
     for (auto&& th : threads)
@@ -399,6 +400,11 @@ std::vector<size_t> ThreadPool::get_bound_thread_count_by_numa_node() const {
     }
 
     return counts;
+}
+
+void ThreadPool::ensure_network_replicated() {
+    for (auto&& th : threads)
+        th->ensure_network_replicated();
 }
 
 }  // namespace Stockfish
